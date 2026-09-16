@@ -1,0 +1,120 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>资源面板 · 小o机器人</title>
+<style>
+:root{--bg:#0b0f14;--card:#121820;--bd:#1e2836;--fg:#e6edf3;--mut:#8b98a8;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#58a6ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.55 -apple-system,"Segoe UI",system-ui,sans-serif;padding:18px;-webkit-text-size-adjust:100%}
+h1{font-size:19px;display:flex;align-items:center;gap:9px}
+.sub{color:var(--mut);font-size:12px;margin:3px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(298px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:11px;padding:14px}
+.card.wide{grid-column:1/-1}
+.card h2{font-size:12px;color:var(--mut);font-weight:600;letter-spacing:.4px;text-transform:uppercase;display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:#3a4653;flex:none}
+.dot.ok{background:var(--ok);box-shadow:0 0 9px var(--ok)}
+.dot.bad{background:var(--bad);box-shadow:0 0 9px var(--bad)}
+.dot.warn{background:var(--warn)}
+.row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed #1b2431;font-size:13px}
+.row:last-child{border-bottom:0}
+.row .k{color:var(--mut);white-space:nowrap}
+.row .v{font-variant-numeric:tabular-nums;text-align:right;word-break:break-all}
+.big{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:#1b2431;border-radius:3px;overflow:hidden;margin-top:7px}
+.bar i{display:block;height:100%;background:var(--acc);transition:width .4s}
+.err{color:var(--bad);font-size:12px;word-break:break-all}
+.muted{color:var(--mut)}
+a{color:var(--acc);text-decoration:none}
+.pill{font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--bd);color:var(--mut)}
+input{background:#0b1119;border:1px solid var(--bd);color:var(--fg);border-radius:7px;padding:6px 9px;font:13px inherit;width:100%}
+button{background:#1f6feb;border:0;color:#fff;border-radius:7px;padding:6px 12px;font:13px inherit;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--bd);color:var(--mut)}
+</style>
+</head><body>
+<h1><span class="dot" id="topdot"></span>资源面板 · 小o机器人</h1>
+<div class="sub">Cloudflare Worker + GitHub 免费资源实时状态 · 更新于 <span id="ts">—</span>
+&nbsp;<button class="ghost" id="rf">刷新</button></div>
+<div class="grid">
+<div class="card"><h2><span class="dot" id="d-bot"></span>机器人（Worker）</h2><div id="c-bot" class="muted">加载中…</div></div>
+<div class="card"><h2><span class="dot" id="d-gh"></span>GitHub API 配额</h2><div id="c-gh" class="muted">加载中…</div></div>
+<div class="card"><h2><span class="dot" id="d-act"></span>GitHub Actions</h2><div id="c-act" class="muted">加载中…</div></div>
+<div class="card"><h2><span class="dot" id="d-pg"></span>GitHub Pages</h2><div id="c-pg" class="muted">加载中…</div></div>
+<div class="card"><h2><span class="dot" id="d-relay"></span>自建 AI 网关</h2><div id="c-relay" class="muted">加载中…</div></div>
+<div class="card"><h2>免费额度对照（官方数字）</h2><div id="c-quota" class="muted">加载中…</div></div>
+<div class="card wide"><h2>公开接口快照</h2><div id="c-pub" class="muted">加载中…</div></div>
+</div>
+<script>
+const GH='https://api.github.com', U='https://tgcfym.us.ci';
+const $=i=>document.getElementById(i);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const D=(id,st)=>$(id).className='dot '+(st||'');
+const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+const E=m=>`<div class="err">${esc(m)}</div>`;
+const t=s=>s?new Date(s).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+async function F(u,h){const r=await fetch(u,{headers:h||{},cache:'no-store'});let b=null;try{b=await r.json()}catch(e){}return{s:r.status,b};}
+function kv(o,n){return Object.keys(o||{}).slice(0,n).map(k=>{let v=o[k];if(typeof v==='object')v=JSON.stringify(v);return R(esc(k),esc(String(v).slice(0,60)))}).join('')}
+
+async function ghRate(){try{const {s,b}=await F(GH+'/rate_limit');const c=b&&b.resources&&b.resources.core;if(!c)throw new Error('HTTP '+s);
+const p=Math.round(c.remaining/c.limit*100);
+$('c-gh').innerHTML=`<div class="big">${c.remaining}<span class="muted" style="font-size:13px"> / ${c.limit}</span></div><div class="bar"><i style="width:${p}%"></i></div>`+R('重置时间',new Date(c.reset*1000).toLocaleTimeString('zh-CN'))+R('当前模式','匿名（每 IP 60/时）');
+D('d-gh',c.remaining>15?'ok':'warn')}catch(e){$('c-gh').innerHTML=E('取数失败：'+e.message);D('d-gh','bad')}}
+
+async function ghAct(){try{const {s,b}=await F(GH+'/repos/tgcfym/tgbot-ops/actions/runs?per_page=4');if(!b||!b.workflow_runs)throw new Error('HTTP '+s);
+let h='';for(const r of b.workflow_runs){const ok=r.conclusion==='success',bad=r.conclusion&&r.conclusion!=='success';
+h+=`<div class="row"><span class="k"><span class="dot ${r.status==='completed'?(ok?'ok':'bad'):'warn'}"></span> ${esc(r.name)}</span><span class="v">${esc(r.conclusion||r.status)} · ${t(r.created_at)}</span></div>`}
+$('c-act').innerHTML=h+R('总运行次数',b.total_count||'—');
+const f=b.workflow_runs[0];D('d-act',f&&f.conclusion==='success'?'ok':'warn')}catch(e){$('c-act').innerHTML=E('取数失败：'+e.message);D('d-act','bad')}}
+
+async function ghPg(){try{const {s,b}=await F(GH+'/repos/tgcfym/tgbot-ops/pages');if(!b||!b.status&&!b.html_url)throw new Error('HTTP '+s);
+const cert=(b.https_certificate&&b.https_certificate.state)||b.https_certificate||'—';
+$('c-pg').innerHTML=R('状态',esc(b.status))+R('自定义域',esc(b.cname||'—'))+R('HTTPS 证书',esc(cert))+R('站点',`<a href="${esc(b.html_url||'#')}" target="_blank">${esc(b.html_url||'—')}</a>`)+R('强制 HTTPS',b.https_enforced?'已开':'未开');
+D('d-pg',b.status==='built'?'ok':'warn')}catch(e){$('c-pg').innerHTML=E('取数失败：'+e.message);D('d-pg','bad')}}
+</script>
+<script>
+async function loadBot(){const t0=performance.now();try{
+const r=await fetch(U+'/health',{cache:'no-store'});
+const ms=Math.round(performance.now()-t0),b=await r.json();
+const bd=b.bindings||{},ks=Object.keys(bd),good=ks.filter(k=>bd[k]).length;
+$('c-bot').innerHTML='<div class="big">'+(r.ok?'在线':'异常')+' <span class="muted" style="font-size:13px">'+ms+' ms</span></div>'
++row('服务',esc(b.service||'—'))+row('绑定正常',good+' / '+ks.length)+row('边缘时间',esc(b.time||'—'))
++'<div class="mini">'+ks.map(k=>'<span class="chip'+(bd[k]?' on':'')+'">'+esc(k)+'</span>').join('')+'</div>';
+dot('d-bot',r.ok&&good===ks.length?'ok':'warn');
+}catch(e){$('c-bot').innerHTML=err('不可达 '+esc(e.message));dot('d-bot','bad');}}
+</script>
+<script>
+async function loadRelay(){const k=localStorage.getItem('relay_key')||'';
+if(!k){$('c-relay').innerHTML='<div class="muted" style="font-size:12.5px;margin-bottom:8px">填入自建网关密钥（仅存本机浏览器，不上传）</div>'
++'<input id="rk" placeholder="sk-tgcf-..." autocomplete="off"><button id="rkbtn">保存并查询</button>';
+$('rkbtn').onclick=()=>{const v=$('rk').value.trim();if(v){localStorage.setItem('relay_key',v);loadRelay();}};
+dot('d-relay','');return;}
+try{const t0=performance.now();
+const r=await fetch(U+'/v1/usage',{headers:{Authorization:'Bearer '+k},cache:'no-store'});
+if(r.status===401){$('c-relay').innerHTML=err('密钥无效（401）')+'<button class="ghost" id="rk2">重填</button>';
+$('rk2').onclick=()=>{localStorage.removeItem('relay_key');loadRelay();};dot('d-relay','bad');return;}
+const b=await r.json(),pct=b.cap?Math.round(b.calls/b.cap*100):0;
+$('c-relay').innerHTML='<div class="big">'+(b.calls==null?'—':b.calls)+'<span class="muted" style="font-size:13px"> / '+(b.cap==null?'—':b.cap)+' 次（今日）</span></div>'
++'<div class="bar"><i style="width:'+pct+'%"></i></div>'+row('剩余',esc(b.remaining))+'<div id="rl"></div>';
+dot('d-relay',pct<80?'ok':'warn');
+}catch(e){$('c-relay').innerHTML=err('查询失败 '+esc(e.message));dot('d-relay','warn');}}
+</script>
+<script>
+const QUOTA=[['CF Workers','100,000 请求/天'],['Workers AI','10,000 Neurons/天'],['Workers KV','100,000 读 · 1,000 写/天'],
+['D1 数据库','5 GB · 500 MB/库'],['R2 存储','10 GB · 1,000万 Class B/月'],['Queues','10,000 操作/天'],
+['GitHub Actions','公有仓 免费不限量'],['GitHub Pages','100 GB/月 · 1 站点/账号'],
+['GitHub API','5,000/时（token）· 60/时（匿名）'],['ghcr 镜像','公开包 免费']];
+function loadQuota(){if(!$('c-quota'))return;$('c-quota').innerHTML=QUOTA.map(x=>row(esc(x[0]),esc(x[1]))).join('')
++'<div class="muted" style="font-size:11.5px;margin-top:8px">官方免费档上限 · 每日 00:00 UTC（北京 08:00）重置</div>';}
+
+async function loadPub(){const eps=['/api/stats','/api/stack'];let h='';
+for(const p of eps){try{const r=await fetch(U+p,{cache:'no-store'}),b=await r.json();
+h+='<div class="grp">'+p+' <span class="muted">HTTP '+r.status+'</span></div>';
+if(b&&typeof b==='object'){for(const k of Object.keys(b).slice(0,8)){const v=b[k];
+h+=row(esc(k),esc(typeof v==='object'?JSON.stringify(v).slice(0,90):v));}}}catch(e){h+='<div class="grp">'+p+'</div>'+err(esc(e.message));}}
+if($('c-pub'))$('c-pub').innerHTML=h||err('无数据');}
+
+function all(){['loadBot','ghRate','ghAct','ghPg','loadRelay','loadQuota','loadPub'].forEach(f=>{try{window[f]();}catch(e){}});
+if($('ts'))$('ts').textContent=new Date().toLocaleTimeString('zh-CN');}
+if($('rf'))$('rf').onclick=all;
+loadQuota();all();
+setInterval(all,600000);
+</script></body></html>
